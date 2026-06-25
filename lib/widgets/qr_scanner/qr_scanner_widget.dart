@@ -28,21 +28,34 @@
 //   )
 // ---------------------------------------------------------------------------
 
-import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:web_clock_clone/widgets/camera/camera_input_stream.dart';
-import 'package:web_clock_clone/widgets/camera/cutout_overlay_layer.dart';
 import 'package:web_clock_clone/widgets/detection_styles/detection_style.dart';
 import 'package:web_clock_clone/widgets/detection_styles/detection_theme.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:web_clock_clone/widgets/qr_scanner/qr_overlay.dart';
 
 class QrScannerWidget extends StatefulWidget {
   /// Called once when a QR code (or other barcode) is successfully decoded,
   /// whether from the live camera feed or a picked gallery image.
   final void Function(String barcode) onBarcodeDetected;
+
+  /// How long to keep the scanner active with no successful scan before
+  /// stopping the image stream and calling [onTimeout].
+  /// Defaults to 30 seconds. The timer resets when [reset] is called.
+  /// Gallery picks do not count against the timeout — the timer is paused
+  /// while the gallery flow is active.
+  final Duration scanTimeout;
+
+  /// Called when [scanTimeout] elapses with no successful scan.
+  /// The scanner stops processing frames at this point — call [reset] on
+  /// the widget's state key to restart it.
+  /// If null, the scanner just goes silent after timeout with no callback.
+  final VoidCallback? onTimeout;
 
   /// Optional style. Defaults to a rect cutout variant of DetectionStyle.defaults().
   final DetectionStyle? style;
@@ -53,6 +66,8 @@ class QrScannerWidget extends StatefulWidget {
   const QrScannerWidget({
     super.key,
     required this.onBarcodeDetected,
+    this.scanTimeout = const Duration(seconds: 30),
+    this.onTimeout,
     this.style,
     this.onInitFailure,
   });
@@ -70,13 +85,14 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
   bool _isProcessing = false;
   bool _locked = false; // true after first successful scan
   bool _isPickingOrProcessingImage = false;
+  bool _timedOut = false; // true after scanTimeout elapses with no result
+
+  Timer? _timeoutTimer;
 
   // Drives the transient status message shown in the overlay
   // (e.g. "No QR code found in image", "Processing image…").
   // Null = no message shown.
   final ValueNotifier<String?> _statusMessage = ValueNotifier(null);
-
-  final _cameraKey = GlobalKey<CameraInputStreamState>();
 
   DetectionStyle get _style =>
       widget.style ??
@@ -91,18 +107,53 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
         frameBorderWidth: 3.0,
       );
 
+  @override
+  void initState() {
+    super.initState();
+    _startTimer();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Timeout timer
+  // ---------------------------------------------------------------------------
+
+  void _startTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = Timer(widget.scanTimeout, _onTimerFired);
+  }
+
+  void _cancelTimer() {
+    _timeoutTimer?.cancel();
+    _timeoutTimer = null;
+  }
+
+  void _onTimerFired() {
+    if (!mounted || _locked) return;
+    setState(() => _timedOut = true);
+    // Stop the camera stream — the CameraInputStream key lets us reach its state
+    _cameraKey.currentState?.pauseStream();
+    widget.onTimeout?.call();
+  }
+
+  final GlobalKey<CameraInputStreamState> _cameraKey = GlobalKey();
+
   /// Unlocks the scanner so it processes frames again.
   /// Call this if the result page is dismissed and you want to re-scan.
   void reset() {
+    _cancelTimer();
     setState(() {
       _locked = false;
+      _timedOut = false;
       _isPickingOrProcessingImage = false;
     });
     _statusMessage.value = null;
+    _cameraKey.currentState?.resumeStream();
+    _startTimer();
   }
 
   @override
   void dispose() {
+    _cancelTimer();
     _scanner.close();
     _statusMessage.dispose();
     super.dispose();
@@ -113,7 +164,9 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
   // ---------------------------------------------------------------------------
 
   Future<void> _processFrame(InputImage inputImage) async {
-    if (_isProcessing || _locked || _isPickingOrProcessingImage) return;
+    if (_isProcessing || _locked || _isPickingOrProcessingImage || _timedOut) {
+      return;
+    }
     _isProcessing = true;
 
     try {
@@ -121,6 +174,7 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
       if (_locked) return; // double-check after async gap
 
       if (barcodes.isNotEmpty) {
+        _cancelTimer();
         _locked = true;
         widget.onBarcodeDetected(barcodes.first.rawValue!);
       }
@@ -136,8 +190,11 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
   // ---------------------------------------------------------------------------
 
   Future<void> _pickFromGallery() async {
-    if (_isPickingOrProcessingImage || _locked) return;
+    if (_isPickingOrProcessingImage || _locked || _timedOut) return;
 
+    // Pause the timeout while the user is in the gallery picker — we don't
+    // want the timer firing while the app is backgrounded for the gallery.
+    _cancelTimer();
     setState(() => _isPickingOrProcessingImage = true);
     _statusMessage.value = null;
 
@@ -145,7 +202,8 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
       final picked = await _picker.pickImage(source: ImageSource.gallery);
 
       if (picked == null) {
-        // User cancelled — nothing to do
+        // User cancelled — restart the timeout from where it left off
+        _startTimer();
         return;
       }
 
@@ -170,6 +228,7 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
     } catch (_) {
       if (mounted) {
         _statusMessage.value = 'Could not read the image. Try another.';
+        _startTimer();
         await Future.delayed(const Duration(seconds: 3));
         if (mounted) _statusMessage.value = null;
       }
@@ -189,325 +248,14 @@ class QrScannerWidgetState extends State<QrScannerWidget> {
       lensDirection: CameraLensDirection.back,
       onImage: _processFrame,
       onInitFailure: widget.onInitFailure,
-      overlayBuilder: (ctx) => _QrOverlay(
+      overlayBuilder: (ctx) => QrOverlay(
         style: _style,
         statusMessage: _statusMessage,
         isLoading: _isPickingOrProcessingImage,
-        cameraKey: _cameraKey,
+        timedOut: _timedOut,
         onPickFromGallery: _pickFromGallery,
+        onRetry: reset,
       ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Overlay — cutout + scan line + gallery button + status message
-// ---------------------------------------------------------------------------
-
-class _QrOverlay extends StatefulWidget {
-  final DetectionStyle style;
-  final ValueNotifier<String?> statusMessage;
-  final bool isLoading;
-  final VoidCallback onPickFromGallery;
-  final GlobalKey<CameraInputStreamState> cameraKey;
-
-  const _QrOverlay({
-    required this.style,
-    required this.statusMessage,
-    required this.isLoading,
-    required this.onPickFromGallery,
-    required this.cameraKey
-  });
-
-  @override
-  State<_QrOverlay> createState() => _QrOverlayState();
-}
-
-class _QrOverlayState extends State<_QrOverlay>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _scanLineController;
-  late final Animation<double> _scanLine;
-
-  @override
-  void initState() {
-    super.initState();
-    _scanLineController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1800),
-    )..repeat(reverse: true);
-
-    _scanLine = Tween<double>(begin: 0.05, end: 0.95).animate(
-      CurvedAnimation(parent: _scanLineController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _scanLineController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        // Dim layer + rect cutout border
-        CutoutOverlayLayer(style: widget.style),
-
-        // Animated scan line (paused while processing a gallery image)
-        if (!widget.isLoading)
-          AnimatedBuilder(
-            animation: _scanLine,
-            builder: (context, _) =>
-                _ScanLine(style: widget.style, progress: _scanLine.value),
-          ),
-
-        // Loading spinner shown while a gallery image is being processed
-        if (widget.isLoading)
-          const Center(
-            child: CircularProgressIndicator(
-              color: DetectionColors.crimsonLight,
-              strokeWidth: 2.5,
-            ),
-          ),
-
-        // Hint label + transient status message
-        Positioned(
-          bottom: 130,
-          left: 0,
-          right: 0,
-          child: ValueListenableBuilder<String?>(
-            valueListenable: widget.statusMessage,
-            builder: (_, message, _) {
-              return AnimatedSwitcher(
-                duration: const Duration(milliseconds: 250),
-                child: message != null
-                    ? _StatusBanner(key: ValueKey(message), message: message)
-                    : _HintLabel(
-                        style: widget.style,
-                        key: const ValueKey('hint'),
-                      ),
-              );
-            },
-          ),
-        ),
-
-        // Gallery button
-        Positioned(
-          bottom: 40,
-          left: 0,
-          right: 0,
-          child: Padding(
-            padding: EdgeInsets.all(24),
-            child: Row(
-              mainAxisAlignment: .spaceBetween,
-              children: [
-                IconButton(
-                  icon: const Icon(
-                    Icons.flip_camera_ios,
-                    color: DetectionColors.whiteHigh,
-                  ),
-                  onPressed: () => widget.cameraKey.currentState?.switchCamera(),
-                ),
-                _GalleryButton(
-                  style: widget.style,
-                  isLoading: widget.isLoading,
-                  onTap: widget.onPickFromGallery,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Overlay sub-widgets
-// ---------------------------------------------------------------------------
-
-class _HintLabel extends StatelessWidget {
-  final DetectionStyle style;
-
-  const _HintLabel({super.key, required this.style});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        decoration: BoxDecoration(
-          color: style.overlayPanelColor,
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: style.overlayPanelBorderColor),
-        ),
-        child: Text(
-          'Point your camera at a QR code',
-          style: style.subtitleTextStyle,
-        ),
-      ),
-    );
-  }
-}
-
-class _StatusBanner extends StatelessWidget {
-  final String message;
-
-  const _StatusBanner({super.key, required this.message});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 32),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: DetectionColors.navyMid,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: DetectionColors.glassBorder),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(
-              Icons.info_outline_rounded,
-              size: 16,
-              color: DetectionColors.whiteMid,
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Text(
-                message,
-                style: const TextStyle(
-                  color: DetectionColors.whiteHigh,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w400,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _GalleryButton extends StatelessWidget {
-  final DetectionStyle style;
-  final bool isLoading;
-  final VoidCallback onTap;
-
-  const _GalleryButton({
-    required this.style,
-    required this.isLoading,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: isLoading ? null : onTap,
-      child: AnimatedOpacity(
-        opacity: isLoading ? 0.4 : 1.0,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-          decoration: BoxDecoration(
-            color: style.overlayPanelColor,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: style.overlayPanelBorderColor),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.photo_library_outlined,
-                size: 18,
-                color: DetectionColors.whiteHigh,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'Upload from Gallery',
-                style: style.subtitleTextStyle.copyWith(
-                  color: DetectionColors.whiteHigh,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Scan line
-// ---------------------------------------------------------------------------
-
-class _ScanLine extends StatelessWidget {
-  final DetectionStyle style;
-  final double progress; // 0.0 → 1.0 within the cutout height
-
-  const _ScanLine({required this.style, required this.progress});
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
-          return const SizedBox.shrink();
-        }
-
-        final shape = style.cutoutShape;
-        final widthFactor = shape is RectCutout
-            ? shape.widthFactor
-            : shape is OvalCutout
-            ? shape.widthFactor
-            : 0.7;
-        final heightFactor = shape is RectCutout
-            ? shape.heightFactor
-            : shape is OvalCutout
-            ? shape.heightFactor
-            : 0.42;
-
-        final cutoutW = constraints.maxWidth * widthFactor;
-        final cutoutH = constraints.maxHeight * heightFactor;
-        final left = (constraints.maxWidth - cutoutW) / 2;
-        // Mirror the vertical offset used in the painter (0.42 of screen height)
-        final cutoutTop = constraints.maxHeight * 0.42 - cutoutH / 2;
-        final lineY = cutoutTop + cutoutH * progress;
-
-        return SizedBox(
-          width: constraints.maxWidth,
-          height: constraints.maxHeight,
-          child: Stack(
-            children: [
-              Positioned(
-                top: lineY,
-                left: left + 4,
-                child: Container(
-                  width: math.max(0, cutoutW - 8),
-                  height: 2,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        Colors.transparent,
-                        style.frameBorderColor.withValues(alpha: 0.8),
-                        style.frameBorderColor,
-                        style.frameBorderColor.withValues(alpha: 0.8),
-                        Colors.transparent,
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
