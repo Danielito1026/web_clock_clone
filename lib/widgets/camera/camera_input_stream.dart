@@ -43,7 +43,11 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart'
-    show InputImage, InputImageMetadata, InputImageRotation, InputImageFormatValue;
+    show
+        InputImage,
+        InputImageMetadata,
+        InputImageRotation,
+        InputImageFormatValue;
 
 class CameraInputStream extends StatefulWidget {
   /// Which camera to use. Front for face liveness, back for barcode/document scanning.
@@ -232,6 +236,26 @@ class CameraInputStreamState extends State<CameraInputStream>
     });
 
     await _initCamera();
+  }
+
+  /// Captures a still photo and returns it as an [XFile].
+  /// Automatically stops the image stream before capturing — [takePicture]
+  /// cannot run concurrently with [startImageStream] on most platforms.
+  /// The stream is NOT restarted after capture; the caller decides when to
+  /// resume or dispose. Returns null if the controller is not initialized
+  /// or if capture fails.
+  Future<XFile?> capture() async {
+    final controller = _controller;
+    if (controller == null || !_isInitialized) return null;
+
+    try {
+      // Must stop the stream before calling takePicture
+      _stopStream();
+      final photo = await controller.takePicture();
+      return photo;
+    } catch (_) {
+      return null;
+    }
   }
 
   // ---------------------------------------------------------------------------
