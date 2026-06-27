@@ -32,18 +32,25 @@ class FaceLivenessConfig {
   /// Default: 20 seconds per challenge (matches architecture doc).
   final int secondsPerChallenge;
 
+  /// Seconds to wait after all challenges pass before taking the photo.
+  /// Gives the user time to settle into a neutral expression before capture.
+  /// Set to 0 to capture immediately. Default: 3.
+  final int captureDelaySeconds;
+
   const FaceLivenessConfig({
     required this.challengeSequence,
     required this.isRandom,
     this.secondsPerChallenge = 20,
+    this.captureDelaySeconds = 3,
   }) : assert(
-          challengeSequence.length > 0,
-          'challengeSequence must contain at least one challenge.',
-        );
+         challengeSequence.length > 0,
+         'challengeSequence must contain at least one challenge.',
+       );
 
   /// Total session duration in seconds.
   /// Used by ChallengeDirector to initialize the countdown timer.
-  int get sessionDurationSeconds => challengeSequence.length * secondsPerChallenge;
+  int get sessionDurationSeconds =>
+      challengeSequence.length * secondsPerChallenge;
 
   // ---------------------------------------------------------------------------
   // Serialization
@@ -66,14 +73,16 @@ class FaceLivenessConfig {
       challengeSequence: challenges,
       isRandom: json['isRandom'] as bool? ?? false,
       secondsPerChallenge: json['secondsPerChallenge'] as int? ?? 20,
+      captureDelaySeconds: json['captureDelaySeconds'] as int? ?? 3,
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'challengeSequence': challengeSequence.map((c) => c.value).toList(),
-        'isRandom': isRandom,
-        'secondsPerChallenge': secondsPerChallenge,
-      };
+    'challengeSequence': challengeSequence.map((c) => c.value).toList(),
+    'isRandom': isRandom,
+    'secondsPerChallenge': secondsPerChallenge,
+    'captureDelaySeconds': captureDelaySeconds,
+  };
 
   // ---------------------------------------------------------------------------
   // Convenience
@@ -83,11 +92,13 @@ class FaceLivenessConfig {
     List<LivenessChallenge>? challengeSequence,
     bool? isRandom,
     int? secondsPerChallenge,
+    int? captureDelaySeconds,
   }) {
     return FaceLivenessConfig(
       challengeSequence: challengeSequence ?? this.challengeSequence,
       isRandom: isRandom ?? this.isRandom,
       secondsPerChallenge: secondsPerChallenge ?? this.secondsPerChallenge,
+      captureDelaySeconds: captureDelaySeconds ?? this.captureDelaySeconds,
     );
   }
 
@@ -98,14 +109,20 @@ class FaceLivenessConfig {
           runtimeType == other.runtimeType &&
           listEquals(challengeSequence, other.challengeSequence) &&
           isRandom == other.isRandom &&
-          secondsPerChallenge == other.secondsPerChallenge;
+          secondsPerChallenge == other.secondsPerChallenge &&
+          captureDelaySeconds == other.captureDelaySeconds;
 
   @override
-  int get hashCode =>
-      Object.hash(Object.hashAll(challengeSequence), isRandom, secondsPerChallenge);
+  int get hashCode => Object.hash(
+    Object.hashAll(challengeSequence),
+    isRandom,
+    secondsPerChallenge,
+    captureDelaySeconds,
+  );
 
   @override
   String toString() =>
       'FaceLivenessConfig(challenges: ${challengeSequence.map((c) => c.value).toList()}, '
-      'isRandom: $isRandom, secondsPerChallenge: $secondsPerChallenge)';
+      'isRandom: $isRandom, secondsPerChallenge: $secondsPerChallenge, '
+      'captureDelaySeconds: $captureDelaySeconds)';
 }

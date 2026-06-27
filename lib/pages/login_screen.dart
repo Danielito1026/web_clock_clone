@@ -13,6 +13,9 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  late FocusNode _companyCodeNode;
+  late FocusNode _usernameNode;
+  late FocusNode _passwordNode;
   String _companyCode = '';
   String _username = '';
   String _password = '';
@@ -39,6 +42,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             });
           },
         );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _companyCodeNode = FocusNode();
+    _usernameNode = FocusNode();
+    _passwordNode = FocusNode();
+  }
+
+  @override
+  void dispose() {
+    _companyCodeNode.dispose();
+    _usernameNode.dispose();
+    _passwordNode.dispose();
+    super.dispose();
   }
 
   @override
@@ -81,6 +100,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       crossAxisAlignment: .stretch,
                       children: [
                         InputFormField(
+                          focusNode: _companyCodeNode,
                           labelText: 'Company Code',
                           isRequired: true,
                           prefixIcon: const Icon(Icons.apartment),
@@ -96,8 +116,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                           onSaved: (value) =>
                               setState(() => _companyCode = value ?? ''),
+                          textInputAction: TextInputAction.next,
+                          onFieldSubmitted: (_) => _usernameNode.requestFocus(),
                         ),
                         InputFormField(
+                          focusNode: _usernameNode,
                           labelText: 'Username',
                           isRequired: true,
                           prefixIcon: const Icon(Icons.person),
@@ -113,8 +136,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                           onSaved: (value) =>
                               setState(() => _username = value ?? ''),
+                          textInputAction: TextInputAction.next,
+                          onFieldSubmitted: (_) => _passwordNode.requestFocus(),
                         ),
                         InputFormField(
+                          focusNode: _passwordNode,
                           labelText: 'Password',
                           isRequired: true,
                           prefixIcon: const Icon(Icons.lock),
@@ -133,6 +159,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           },
                           onSaved: (value) =>
                               setState(() => _password = value ?? ''),
+                          textInputAction: TextInputAction.done,
+                          onFieldSubmitted: (_) =>
+                              FocusScope.of(context).unfocus(),
                         ),
                         const SizedBox(height: 24),
 

@@ -19,7 +19,8 @@ class InputFormField extends StatefulWidget {
     this.onEditingComplete,
     this.isPasswordField = false,
     this.initialValue,
-    this.isRequired = false
+    this.isRequired = false,
+    this.focusNode,
   });
   final String? labelText;
   final String? hint;
@@ -38,6 +39,7 @@ class InputFormField extends StatefulWidget {
   final bool isPasswordField;
   final String? initialValue;
   final bool isRequired;
+  final FocusNode? focusNode;
 
   @override
   State<InputFormField> createState() => _InputFormFieldState();
@@ -77,13 +79,14 @@ class _InputFormFieldState extends State<InputFormField> {
               ),
               textAlign: .start,
             ),
-            if(widget.isRequired)Text(
-              '*',
-              style: Theme.of(context).textTheme.labelMedium!.copyWith(
-                color: Colors.red,
+            if (widget.isRequired)
+              Text(
+                '*',
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium!.copyWith(color: Colors.red),
+                textAlign: .start,
               ),
-              textAlign: .start,
-            ),
           ],
         ),
         TextFormField(
@@ -103,6 +106,7 @@ class _InputFormFieldState extends State<InputFormField> {
             hintText: widget.hint,
           ),
           keyboardType: widget.keyboardType,
+          focusNode: widget.focusNode,
           autocorrect: widget.autocorrect,
           textCapitalization: widget.textCapitalization,
           validator: widget.validator,
