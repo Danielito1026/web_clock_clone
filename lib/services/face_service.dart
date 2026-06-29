@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 /// Result returned by [FaceService.registerSession].
@@ -6,9 +8,8 @@ class FaceResult {
   final String? faceUuid;     // present on success
   final String? errorMessage; // present on failure
 
-  const FaceResult.success({required String faceUuid})
+  const FaceResult.success({required this.faceUuid})
       : isSuccess = true,
-        faceUuid = faceUuid,
         errorMessage = null;
 
   const FaceResult.failure({required String message})
@@ -22,9 +23,32 @@ class FaceResult {
 class FaceService {
   Future<FaceResult> registerSession({
     required String? authToken,
+    required File? photo,
     required CancelToken cancelToken,
   }) async {
     // TODO: replace with real API call when backend is available.
+    // POST /api/face/session
+    // body: { auth_token }
+    // file: photo (multipart if photo != null)
+    //
+    // Suggested Dio multipart pattern:
+    //
+    // final formData = FormData.fromMap({
+    //   'auth_token': authToken,
+    //   if (photo != null)
+    //     'photo': await MultipartFile.fromFile(
+    //       photo.path,
+    //       filename: 'face_capture.jpg',
+    //       contentType: DioMediaType('image', 'jpeg'),
+    //     ),
+    // });
+    // final response = await dio.post(
+    //   '/api/face/session',
+    //   data: formData,
+    //   cancelToken: cancelToken,
+    // );
+    // return FaceResult.success(faceUuid: response.data['face_uuid']);
+    
     // This sample implementation returns a success for a known demo
     // auth token and a failure otherwise.
     await Future.delayed(const Duration(milliseconds: 400));
