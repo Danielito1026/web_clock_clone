@@ -74,7 +74,7 @@ class FaceLivenessScreen extends ConsumerWidget {
                 // ChallengeDirector and session timer, same config.
                 key: ValueKey('face_session_$attemptsRemaining'),
                 config: config.faceLivenessConfig!,
-                onPass: (_) => notifier.onPass(),
+                onPass: (file) => notifier.onPass(file),
                 onTimeout: () => notifier.onTimeout(),
                 onUnsupportedDevice: () => context.go('/'),
               ),

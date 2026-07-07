@@ -45,20 +45,34 @@ class _CutoutPainter extends CustomPainter {
       height: cutoutHeight,
     );
 
-    // --- Dim overlay path (full screen minus cutout) ---
-    final overlayPath = Path()
-      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-
     final cutoutPath = _buildCutoutPath(shape, cutoutRect);
-    final dimPath = Path.combine(
-      PathOperation.difference,
-      overlayPath,
-      cutoutPath,
-    );
 
-    canvas.drawPath(dimPath, Paint()..color = style.cameraOverlayColor);
+    // --- Dim overlay with transparent cutout hole ---
+    //
+    // Previously used Path.combine(PathOperation.difference, ...) which works
+    // in debug (software renderer) but breaks in release builds on Android
+    // where Skia/Impeller handles PathOperation.difference incorrectly on the
+    // GPU — producing an opaque white/black fill instead of a transparent hole.
+    //
+    // Fix: use saveLayer + BlendMode.clear to punch the hole instead.
+    // saveLayer isolates this drawing to its own compositing layer so
+    // BlendMode.clear only erases within that layer, not the camera preview
+    // behind it. This is renderer-agnostic and works in both debug and release.
+    final fullRect = Rect.fromLTWH(0, 0, size.width, size.height);
 
-    // --- Frame border ---
+    canvas.saveLayer(fullRect, Paint());
+
+    // 1. Fill the entire layer with the dim overlay color
+    canvas.drawRect(fullRect, Paint()..color = style.cameraOverlayColor);
+
+    // 2. Punch out the cutout area using BlendMode.clear
+    //    This erases pixels within the cutout to fully transparent,
+    //    revealing the camera preview behind the layer.
+    canvas.drawPath(cutoutPath, Paint()..blendMode = BlendMode.clear);
+
+    canvas.restore();
+
+    // --- Frame border (drawn after restore so it sits above the dim layer) ---
     canvas.drawPath(
       cutoutPath,
       Paint()

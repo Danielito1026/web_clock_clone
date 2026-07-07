@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_clock_clone/config/verfication_orchestrator.dart';
 import 'package:web_clock_clone/providers/orchestrator_provider.dart';
@@ -60,13 +62,16 @@ class FaceNotifier extends AsyncNotifier<FaceState> {
   int get attemptsRemaining => RetryCounter.maxAttempts - _retryCounter.count;
 
   // ---------------------------------------------------------------------------
-  // onPass — wired to FaceLivenessWidget.onPass
+  // onPass — wired to FaceLivenessWidget.onPass(File? photo)
   //
   // All challenges completed within the session timer.
   // Call the backend to register the session and receive face_uuid.
+  // [photo] is the captured face image. May be null if capture failed —
+  // backend decides whether to accept or reject a null photo.
+  // The photo is sent to registerSession() alongside the auth token.
   // ---------------------------------------------------------------------------
 
-  Future<void> onPass() async {
+  Future<void> onPass(File? photo) async {
     state = const AsyncLoading();
 
     final authToken =
@@ -76,6 +81,7 @@ class FaceNotifier extends AsyncNotifier<FaceState> {
 
     final result = await _repository.registerSession(
       authToken: authToken,
+      photo: photo,         // may be null — backend handles that case
       cancelToken: cancelToken,
     );
 
