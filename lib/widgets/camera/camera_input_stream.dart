@@ -45,6 +45,7 @@ import 'package:flutter/material.dart';
 import 'package:google_mlkit_commons/google_mlkit_commons.dart'
     show
         InputImage,
+        InputImageFormat,
         InputImageMetadata,
         InputImageRotation,
         InputImageFormatValue;
@@ -273,8 +274,10 @@ class CameraInputStreamState extends State<CameraInputStream>
 
     final rotation = _sensorRotation(camera.sensorOrientation);
 
-    final format = InputImageFormatValue.fromRawValue(image.format.raw);
-    if (format == null) return null;
+    final format = InputImageFormatValue.fromRawValue(image.format.raw) ??
+    (image.planes.length == 1
+        ? InputImageFormat.nv21
+        : InputImageFormat.yuv_420_888);
 
     final plane = image.planes.first;
 

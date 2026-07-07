@@ -18,24 +18,28 @@ class ScanLine extends StatelessWidget {
         final cutoutTop = constraints.maxHeight * 0.42 - cutoutH / 2;
         final lineY = cutoutTop + cutoutH * progress;
 
-        return Positioned(
-          top: lineY,
-          left: left + 4,
-          child: Container(
-            width: cutoutW - 8,
-            height: 2,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  Colors.transparent,
-                  style.frameBorderColor.withValues(alpha: 0.8),
-                  style.frameBorderColor,
-                  style.frameBorderColor.withValues(alpha: 0.8),
-                  Colors.transparent,
-                ],
+        return Stack(
+          children: [
+            Positioned(
+              top: lineY,
+              left: left + 4,
+              child: Container(
+                width: cutoutW - 8,
+                height: 2,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.transparent,
+                      style.frameBorderColor.withValues(alpha: 0.8),
+                      style.frameBorderColor,
+                      style.frameBorderColor.withValues(alpha: 0.8),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
               ),
             ),
-          ),
+          ],
         );
       },
     );
