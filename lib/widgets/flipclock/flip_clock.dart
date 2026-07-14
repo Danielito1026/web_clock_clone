@@ -6,7 +6,7 @@ import 'package:web_clock_clone/widgets/flipclock/date_display.dart';
 import 'package:web_clock_clone/widgets/flipclock/flip_group.dart';
 import 'package:web_clock_clone/widgets/flipclock/separator.dart';
 
-enum HourFormat { h12, h24 }
+enum FlipClockHourFormat { h12, h24 }
 
 enum SeparatorStyle { colon, dot, slash, none }
 
@@ -26,7 +26,7 @@ enum SeparatorStyle { colon, dot, slash, none }
 /// Sample usage:
 /// ```dart
 /// FlipClock(
-///   hourFormat: HourFormat.h12,
+///   hourFormat: FlipClockHourFormat.h12,
 ///   showSeconds: true,
 ///   showDate: false,
 ///   digitSize: 45,
@@ -35,7 +35,7 @@ enum SeparatorStyle { colon, dot, slash, none }
 /// )
 /// ```
 class FlipClock extends StatefulWidget {
-  final HourFormat hourFormat;
+  final FlipClockHourFormat hourFormat;
   final bool showAmPm;
   final bool showSeconds;
   final bool showDate;
@@ -63,7 +63,7 @@ class FlipClock extends StatefulWidget {
 
   const FlipClock({
     super.key,
-    this.hourFormat = HourFormat.h24,
+    this.hourFormat = FlipClockHourFormat.h24,
     this.showAmPm = true,
     this.showSeconds = true,
     this.showDate = true,
@@ -126,7 +126,7 @@ class _FlipClockState extends State<FlipClock> {
 
   @override
   Widget build(BuildContext context) {
-    final is12h = widget.hourFormat == HourFormat.h12;
+    final is12h = widget.hourFormat == FlipClockHourFormat.h12;
     final hour = is12h
         ? (_now.hour % 12 == 0 ? 12 : _now.hour % 12)
         : _now.hour;

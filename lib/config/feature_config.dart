@@ -39,4 +39,24 @@ class FeatureConfig {
       ),
     );
   }
+
+  factory FeatureConfig.fromJson(Map<String, dynamic> json) {
+    return FeatureConfig(
+      loginEnabled: json['loginEnabled'] as bool? ?? false,
+      qrEnabled: json['qrEnabled'] as bool? ?? false,
+      faceEnabled: json['faceEnabled'] as bool? ?? false,
+      faceLivenessConfig: json['faceLivenessConfig'] != null
+          ? FaceLivenessConfig.fromJson(
+              json['faceLivenessConfig'] as Map<String, dynamic>,
+            )
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'loginEnabled': loginEnabled,
+    'qrEnabled': qrEnabled,
+    'faceEnabled': faceEnabled,
+    'faceLivenessConfig': faceLivenessConfig?.toJson(),
+  };
 }

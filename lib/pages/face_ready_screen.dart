@@ -46,10 +46,6 @@ class _FaceReadyScreenState extends State<FaceReadyScreen> {
     final theme = Theme.of(context);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Face Verification'),
-        automaticallyImplyLeading: false, // no back button — must tap Ready
-      ),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 32.0, vertical: 40.0),
@@ -114,6 +110,7 @@ class _FaceReadyScreenState extends State<FaceReadyScreen> {
                 child: ElevatedButton(
                   onPressed: _isNavigating ? null : _onReady,
                   style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFC00000),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),

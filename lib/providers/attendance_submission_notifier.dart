@@ -64,7 +64,7 @@ class AttendanceSubmissionNotifier
     // Guard: loginState must be present — Login step is always active when
     // submission is reached (even Login-only config sets loginState).
     if (loginState == null ||
-        loginState.companyCode == null ||
+        homeState.companyCode.isEmpty ||
         loginState.username == null ||
         loginState.password == null ||
         authToken == null) {
@@ -77,7 +77,7 @@ class AttendanceSubmissionNotifier
 
     final payload = AttendanceRecord(
       eventType: homeState.selectedEventType.value,
-      companyCode: loginState.companyCode!,
+      companyCode: homeState.companyCode,
       username: loginState.username!,
       password: loginState.password!, // memory only; per architecture spec
       authToken: authToken,

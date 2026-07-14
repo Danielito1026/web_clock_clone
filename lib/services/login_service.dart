@@ -31,7 +31,7 @@ class LoginService {
     await Future.delayed(const Duration(milliseconds: 500));
 
     // Example demo credentials -> success
-    if (companyCode == 'demo' && username == 'demo' && password == 'demodemo') {
+    if (username == 'demo' && password == 'demodemo') {
       return const LoginResult.success(authToken: 'sample-auth-token-123456');
     }
 

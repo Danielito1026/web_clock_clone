@@ -21,6 +21,10 @@ class InputFormField extends StatefulWidget {
     this.initialValue,
     this.isRequired = false,
     this.focusNode,
+    this.readOnly = false,
+    this.enabled = true,
+    this.controller,
+    this.errorText,
   });
   final String? labelText;
   final String? hint;
@@ -40,6 +44,10 @@ class InputFormField extends StatefulWidget {
   final String? initialValue;
   final bool isRequired;
   final FocusNode? focusNode;
+  final bool readOnly;
+  final bool enabled;
+  final TextEditingController? controller;
+  final String? errorText;
 
   @override
   State<InputFormField> createState() => _InputFormFieldState();
@@ -65,8 +73,8 @@ class _InputFormFieldState extends State<InputFormField> {
   @override
   Widget build(BuildContext context) {
     return Column(
-      mainAxisAlignment: .start,
-      crossAxisAlignment: .stretch,
+      mainAxisAlignment: MainAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 8,
       children: [
         Row(
@@ -77,7 +85,7 @@ class _InputFormFieldState extends State<InputFormField> {
               style: Theme.of(context).textTheme.labelMedium!.copyWith(
                 color: const Color.fromARGB(255, 163, 163, 166),
               ),
-              textAlign: .start,
+              textAlign: TextAlign.start,
             ),
             if (widget.isRequired)
               Text(
@@ -85,11 +93,14 @@ class _InputFormFieldState extends State<InputFormField> {
                 style: Theme.of(
                   context,
                 ).textTheme.labelMedium!.copyWith(color: Colors.red),
-                textAlign: .start,
+                textAlign: TextAlign.start,
               ),
           ],
         ),
         TextFormField(
+          controller: widget.controller,
+          readOnly: widget.readOnly,
+          enabled: widget.enabled,
           cursorColor: Colors.white,
           initialValue: widget.initialValue,
           style: const TextStyle(color: Colors.white, fontSize: 16),
@@ -104,6 +115,7 @@ class _InputFormFieldState extends State<InputFormField> {
                   )
                 : widget.suffixIcon,
             hintText: widget.hint,
+            errorText: widget.errorText,
           ),
           keyboardType: widget.keyboardType,
           focusNode: widget.focusNode,

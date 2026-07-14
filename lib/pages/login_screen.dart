@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:web_clock_clone/providers/home_notifier_provider.dart';
 import 'package:web_clock_clone/providers/login_notifier_provider.dart';
 import 'package:web_clock_clone/widgets/flipclock/flip_clock.dart';
 import 'package:web_clock_clone/widgets/input_form_field.dart';
@@ -13,10 +14,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  late FocusNode _companyCodeNode;
   late FocusNode _usernameNode;
   late FocusNode _passwordNode;
-  String _companyCode = '';
   String _username = '';
   String _password = '';
 
@@ -29,14 +28,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     ref
         .read(loginNotifierProvider.notifier)
         .submit(
-          _companyCode.trim(),
           _username.trim(),
           _password,
           onMaxRetriesExceeded: () {
             // Reset the form and clear the local fields so the UI reflects the reset.
             _formKey.currentState?.reset();
             setState(() {
-              _companyCode = '';
               _username = '';
               _password = '';
             });
@@ -47,14 +44,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    _companyCodeNode = FocusNode();
     _usernameNode = FocusNode();
     _passwordNode = FocusNode();
   }
 
   @override
   void dispose() {
-    _companyCodeNode.dispose();
     _usernameNode.dispose();
     _passwordNode.dispose();
     super.dispose();
@@ -64,6 +59,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final deviceHeight = MediaQuery.of(context).size.height;
 
+    final homeState = ref.watch(homeNotifierProvider);
     final loginAsync = ref.watch(loginNotifierProvider);
     final notifier = ref.read(loginNotifierProvider.notifier);
 
@@ -79,10 +75,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             constraints: BoxConstraints(minHeight: deviceHeight * 0.75),
             child: Column(
               spacing: 28,
-              mainAxisAlignment: .center,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const FlipClock(
-                  hourFormat: .h12,
+                  hourFormat: FlipClockHourFormat.h12,
                   digitSize: 45,
                   width: 35,
                   height: 56,
@@ -97,27 +93,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     key: _formKey,
                     child: Column(
                       spacing: 12,
-                      crossAxisAlignment: .stretch,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         InputFormField(
-                          focusNode: _companyCodeNode,
                           labelText: 'Company Code',
                           isRequired: true,
                           prefixIcon: const Icon(Icons.apartment),
-                          hint: 'Enter your company code',
-                          keyboardType: TextInputType.name,
-                          autocorrect: false,
-                          textCapitalization: TextCapitalization.none,
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter your company code';
-                            }
-                            return null;
-                          },
-                          onSaved: (value) =>
-                              setState(() => _companyCode = value ?? ''),
-                          textInputAction: TextInputAction.next,
-                          onFieldSubmitted: (_) => _usernameNode.requestFocus(),
+                          initialValue: homeState.companyCode,
+                          enabled: false,
                         ),
                         InputFormField(
                           focusNode: _usernameNode,

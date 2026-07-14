@@ -22,90 +22,93 @@ class FaceLivenessScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final configAsync = ref.watch(featureConfigProvider);
+    final orchestrator = ref.read(verificationOrchestratorProvider.notifier);
+    final config = orchestrator.lastConfig;
     final notifier = ref.read(faceNotifierProvider.notifier);
     final faceAsync = ref.watch(faceNotifierProvider);
 
-    return Scaffold(
-      body: configAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(
+    // Hard block if, for any reason, we reached this screen without a
+    // valid face config — shouldn't happen (validateConfig() guarantees
+    // faceEnabled implies faceLivenessConfig is present), but fail safe
+    // rather than null-check-crash.
+    if (config?.faceLivenessConfig == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Face Verification')),
+        body: const Center(
           child: Padding(
-            padding: const EdgeInsets.all(24.0),
+            padding: EdgeInsets.all(24.0),
             child: Text(
-              'Could not load face liveness configuration.\n\n$e',
+              'Face liveness is not configured. '
+              'Please contact your administrator.',
               textAlign: TextAlign.center,
             ),
           ),
         ),
-        data: (config) {
-          // Hard block if face liveness config is missing from server response.
-          if (config.faceLivenessConfig == null) {
-            return const Center(
-              child: Padding(
-                padding: EdgeInsets.all(24.0),
-                child: Text(
-                  'Face liveness is not configured. '
-                  'Please contact your administrator.',
-                  textAlign: TextAlign.center,
+      );
+    }
+
+    final faceState = faceAsync.value;
+    final isTimeout = faceState?.status == FaceStatus.timeout;
+    final attemptsRemaining = notifier.attemptsRemaining;
+
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.face, color: Colors.white),
+              const SizedBox(width: 8),
+              const Text(
+                'Face Liveness Verification',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-            );
-          }
-
-          final faceState = faceAsync.value;
-          final isTimeout = faceState?.status == FaceStatus.timeout;
-          final attemptsRemaining = notifier.attemptsRemaining;
-
-          return Stack(
-            children: [
-              // ── FaceLivenessWidget ───────────────────────────────────────
-              // The widget is fully self-contained:
-              //   - Creates and starts its own ChallengeDirector with config
-              //   - Owns camera init/dispose and ML Kit validator
-              //   - Registers its own WidgetsBindingObserver for camera cleanup
-              //
-              // On timeout, the widget fires onTimeout. FaceNotifier decides
-              // whether to retry or reset to home. If retrying, the screen
-              // stays mounted and we use a ValueKey on the widget to force
-              // Flutter to remount it fresh — giving it a new director/session.
-              FaceLivenessWidget(
-                // Key changes on each retry → forces widget remount → fresh
-                // ChallengeDirector and session timer, same config.
-                key: ValueKey('face_session_$attemptsRemaining'),
-                config: config.faceLivenessConfig!,
-                onPass: (file) => notifier.onPass(file),
-                onTimeout: () => notifier.onTimeout(),
-                onUnsupportedDevice: () => context.go('/'),
-              ),
-
-              // ── Timeout banner (brief feedback before widget remounts) ────
-              if (isTimeout)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: SafeArea(
-                    child: Container(
-                      color: Colors.orange.shade800,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
+            ],
+          ),
+          automaticallyImplyLeading: false,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          centerTitle: true,
+        ),
+        body: Stack(
+          children: [
+            FaceLivenessWidget(
+              key: ValueKey('face_session_$attemptsRemaining'),
+              config: config!.faceLivenessConfig!,
+              onPass: (file) => notifier.onPass(file),
+              onTimeout: () => notifier.onTimeout(),
+              onUnsupportedDevice: () => context.go('/'),
+            ),
+            if (isTimeout)
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: SafeArea(
+                  child: Container(
+                    color: Colors.orange.shade800,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: Text(
+                      'Time\'s up. $attemptsRemaining attempt(s) remaining.',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
                       ),
-                      child: Text(
-                        'Time\'s up. $attemptsRemaining attempt(s) remaining.',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ),
-            ],
-          );
-        },
+              ),
+          ],
+        ),
       ),
     );
   }
