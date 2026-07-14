@@ -18,7 +18,7 @@ import 'package:web_clock_clone/providers/orchestrator_provider.dart';
 // RouterNotifier — bridges Riverpod → GoRouter reactivity
 //
 // GoRouter's redirect only re-runs when this notifier calls notifyListeners().
-// We watch both featureConfigProvider and verificationOrchestratorProvider
+// We watch both cachedCompanyConfigProvider and verificationOrchestratorProvider
 // so any change to either triggers a redirect re-evaluation.
 // ---------------------------------------------------------------------------
 
@@ -26,8 +26,8 @@ class RouterNotifier extends ChangeNotifier {
   final Ref _ref;
 
   RouterNotifier(this._ref) {
-    // Watch featureConfigProvider — re-evaluate redirect on load/error
-    _ref.listen(featureConfigProvider, (_, _) => notifyListeners());
+    // Watch cachedCompanyConfigProvider — re-evaluate redirect on load/error
+    _ref.listen(cachedCompanyConfigProvider, (_, _) => notifyListeners());
 
     // Watch orchestrator state — re-evaluate redirect on every pipeline change
     _ref.listen(verificationOrchestratorProvider, (_, _) => notifyListeners());
@@ -35,30 +35,26 @@ class RouterNotifier extends ChangeNotifier {
 
   String? redirect(BuildContext context, GoRouterState routerState) {
     final currentPath = routerState.matchedLocation;
-    final configAsync = _ref.read(featureConfigProvider);
+    final cacheAsync = _ref.read(cachedCompanyConfigProvider);
 
     // 1. Config still loading — keep user on splash, redirect there if somehow
     //    they landed elsewhere (e.g. deep link on cold start).
-    if (configAsync is AsyncLoading) {
+    if (cacheAsync is AsyncLoading) {
       return currentPath == '/splash' ? null : '/splash';
     }
 
-    // 2. Config loaded or errored — splash is no longer a valid destination.
-    //    Redirect away immediately so the user never gets stuck on it.
-    if (currentPath == '/splash') {
-      Future.delayed(const Duration(seconds: 1));
-      if (configAsync is AsyncError) return '/error/config';
-      return '/'; // config loaded successfully → go to home
-    }
+    // 2. Cache read resolved (hit or miss) — splash's only job is done.
+    if (currentPath == '/splash') return '/';
 
-    // 3. Config failed — hard block
-    if (configAsync is AsyncError) return '/error/config';
-
-    // 4. Read pipeline state
     final pipelineState = _ref.read(verificationOrchestratorProvider);
     final orchestrator = _ref.read(verificationOrchestratorProvider.notifier);
 
-    // 5. Permission errors
+    // 3. Company found, but its config is structurally invalid — hard block.
+    if (pipelineState == PipelineState.configError) {
+      return '/error/config';
+    }
+
+    // 4. Permission errors
     if (pipelineState == PipelineState.permissionDenied) {
       return '/error/permission?type=denied';
     }
@@ -66,18 +62,23 @@ class RouterNotifier extends ChangeNotifier {
       return '/error/permission?type=permanent';
     }
 
-    // 6. Pipeline idle — stay on home
-    if (pipelineState == PipelineState.idle) return null;
+    // 5. Idle, fetching config, or bad company code — all stay on home.
+    //    HomeScreen renders the loading spinner / inline error itself.
+    if (pipelineState == PipelineState.idle ||
+        pipelineState == PipelineState.loadingConfig ||
+        pipelineState == PipelineState.companyCodeInvalid) {
+      return null;
+    }
 
-    // 7. Pipeline complete — go to result
+    // 6. Pipeline complete — go to result
     if (orchestrator.isComplete) return '/result';
 
-    // 8. Route to current active step
+    // 7. Route to current active step
     return switch (orchestrator.currentStep) {
       VerificationStep.login => '/verify/login',
-      VerificationStep.qr   => '/verify/qr',
+      VerificationStep.qr => '/verify/qr',
       VerificationStep.face => _faceRedirect(currentPath),
-      null                  => null,
+      null => null,
     };
   }
 
@@ -87,9 +88,7 @@ class RouterNotifier extends ChangeNotifier {
   /// actively on /verify/face doing liveness challenges.
   String? _faceRedirect(String currentPath) {
     const faceRoutes = {'/verify/face-ready', '/verify/face'};
-    if (faceRoutes.contains(currentPath)) {
-      return null;
-    } // already where we need to be
+    if (faceRoutes.contains(currentPath)) return null;
     return '/verify/face-ready';
   }
 }

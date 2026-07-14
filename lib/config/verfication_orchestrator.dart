@@ -1,20 +1,32 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:web_clock_clone/config/company_code_not_found_exception.dart';
+import 'package:web_clock_clone/config/config_exception.dart';
 import 'package:web_clock_clone/config/feature_config.dart';
 import 'package:web_clock_clone/enums/verification_step.dart';
 import 'package:web_clock_clone/network/cancel_token_manager.dart';
 import 'package:web_clock_clone/permissions/camera_permission_status.dart';
+import 'package:web_clock_clone/providers/orchestrator_provider.dart';
 
 enum PipelineState {
-  idle, // before buildPipeline() is called
+  idle, // before startPipeline() is called
+  loadingConfig, // fetching FeatureConfig for a (new) company code
   ready, // steps built, permission granted
+  companyCodeInvalid, // backend didn't recognize the company code — inline-fixable
   permissionDenied, // camera soft-denied, retryable
   permissionPermanentlyDenied, // must open device settings
-  configError, // caught from validateConfig()
+  configError, // company found, but validateConfig() threw — hard block
 }
 
 class VerificationOrchestrator extends Notifier<PipelineState> {
   List<VerificationStep> _activeSteps = [];
   int _currentStepIndex = 0;
+  FeatureConfig? _lastConfig;
+  FeatureConfig? get lastConfig => _lastConfig;
+
+  /// Set when state becomes companyCodeInvalid or configError, so the UI
+  /// can render a specific message. Cleared at the top of every
+  /// startPipeline() call.
+  String? lastError;
 
   // Owned here so AppLifecycleObserver and step notifiers can reach it
   // through the orchestrator rather than as a separate provider.
@@ -38,11 +50,61 @@ class VerificationOrchestrator extends Notifier<PipelineState> {
       _activeSteps.isNotEmpty && _currentStepIndex >= _activeSteps.length;
 
   // ---------------------------------------------------------------------------
-  // buildPipeline — called once when featureConfigProvider resolves.
-  // Also re-called from PermissionErrorScreen "Try Again" tap.
+  // startPipeline — called by HomeScreen's Start button with the entered
+  // company code. Checks the cache first; only calls the backend when the
+  // company code differs from what's cached.
+  // ---------------------------------------------------------------------------
+
+  Future<void> startPipeline(String companyCode) async {
+    if (state == PipelineState.loadingConfig) return; // double-tap guard
+
+    lastError = null;
+
+    final cache = ref.read(companyConfigCacheProvider);
+    final cached = await cache.load();
+
+    FeatureConfig? config;
+
+    if (cached != null && cached.companyCode == companyCode) {
+      try {
+        validateConfig(cached.config);
+        config = cached.config;
+      } on ConfigException {
+        // Stale/invalid cached shape — don't hard-block on a local caching
+        // problem, fall through to a fresh fetch below.
+        config = null;
+      }
+    }
+
+    if (config == null) {
+      state = PipelineState.loadingConfig;
+
+      final repository = ref.read(featureConfigRepositoryProvider);
+      try {
+        config = await repository.fetchConfig(companyCode);
+      } on CompanyCodeNotFoundException catch (e) {
+        lastError = e.message;
+        state = PipelineState.companyCodeInvalid;
+        return;
+      } on ConfigException catch (e) {
+        lastError = e.toString();
+        state = PipelineState.configError;
+        return;
+      }
+      await cache.save(companyCode, config);
+    }
+
+    await buildPipeline(config);
+  }
+
+  // ---------------------------------------------------------------------------
+  // buildPipeline — builds the active step list + checks camera permission.
+  // Called by startPipeline(), and again by retryPermissionCheck() below
+  // (no new fetch needed — same config, permission may have changed).
   // ---------------------------------------------------------------------------
 
   Future<void> buildPipeline(FeatureConfig config) async {
+    _lastConfig = config;
     _activeSteps = [];
     _currentStepIndex = 0;
 
@@ -65,6 +127,14 @@ class VerificationOrchestrator extends Notifier<PipelineState> {
       }
     } else {
       state = PipelineState.ready;
+    }
+  }
+
+  /// Called from PermissionErrorScreen's "Try Again" — re-checks permission
+  /// against the last fetched config without hitting the network again.
+  Future<void> retryPermissionCheck() async {
+    if (_lastConfig != null) {
+      await buildPipeline(_lastConfig!);
     }
   }
 

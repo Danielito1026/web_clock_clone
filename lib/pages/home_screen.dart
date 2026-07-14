@@ -1,21 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_clock_clone/config/verfication_orchestrator.dart';
+import 'package:web_clock_clone/providers/home_notifier_provider.dart';
 import 'package:web_clock_clone/providers/orchestrator_provider.dart';
 import 'package:web_clock_clone/widgets/event_selector.dart';
 import 'package:web_clock_clone/widgets/flipclock/flip_clock.dart';
+import 'package:web_clock_clone/widgets/input_form_field.dart';
 
-class HomeScreen extends ConsumerWidget {
+class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final configAsync = ref.watch(featureConfigProvider);
-    final pipelineState = ref.watch(verificationOrchestratorProvider);
+  ConsumerState<HomeScreen> createState() => _HomeScreenState();
+}
 
-    // Start button is active only when config has loaded and pipeline is idle.
+class _HomeScreenState extends ConsumerState<HomeScreen> {
+  late final TextEditingController _companyCodeController;
+
+  @override
+  void initState() {
+    super.initState();
+    _companyCodeController = TextEditingController(
+      text: ref.read(homeNotifierProvider).companyCode,
+    );
+  }
+
+  @override
+  void dispose() {
+    _companyCodeController.dispose();
+    super.dispose();
+  }
+
+  void _onStart() {
+    final trimmed = _companyCodeController.text.trim();
+    if (trimmed.isEmpty) return;
+
+    ref.read(homeNotifierProvider.notifier).setCompanyCode(trimmed);
+    ref.read(verificationOrchestratorProvider.notifier).startPipeline(trimmed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Keep the field in sync if the cached company code resolves after
+    // this screen has already built (cold-start race with the cache read).
+    ref.listen(homeNotifierProvider, (previous, next) {
+      if (previous?.companyCode != next.companyCode &&
+          _companyCodeController.text != next.companyCode) {
+        _companyCodeController.text = next.companyCode;
+      }
+    });
+
+    final pipelineState = ref.watch(verificationOrchestratorProvider);
+    final orchestrator = ref.watch(verificationOrchestratorProvider.notifier);
+
+    final isLoadingConfig = pipelineState == PipelineState.loadingConfig;
+    final isInvalidCode = pipelineState == PipelineState.companyCodeInvalid;
     final canStart =
-        configAsync is AsyncData && pipelineState == PipelineState.idle;
+        (pipelineState == PipelineState.idle || isInvalidCode) &&
+        _companyCodeController.text.trim().isNotEmpty;
 
     return Scaffold(
       body: SafeArea(
@@ -24,38 +66,50 @@ class HomeScreen extends ConsumerWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // ── Flip clock (existing widget — integrate here) ──────────────
-              // Replace the placeholder below with your FlipClockWidget once
-              // you have it imported. Do not rebuild the clock logic.
-              const FlipClock(hourFormat: .h12, digitSize: 45, width: 35, height: 56),
+              const FlipClock(
+                hourFormat: FlipClockHourFormat.h12,
+                digitSize: 45,
+                width: 35,
+                height: 56,
+              ),
 
-              const SizedBox(height: 48),
-
-              // ── Event type toggle ──────────────────────────────────────────
-              const EventSelector(),
-
-              const SizedBox(height: 40),
-
-              // ── Start button ───────────────────────────────────────────────
-              configAsync.when(
-                loading: () => const _StartButton(
-                  label: 'Loading...',
-                  enabled: false,
-                  onTap: null,
+              const SizedBox(height: 32),
+              Container(
+                padding: EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF191B21),
+                  borderRadius: BorderRadius.circular(18),
                 ),
-                error: (_, _) => const _StartButton(
-                  label: 'Unavailable',
-                  enabled: false,
-                  onTap: null,
-                ),
-                data: (config) => _StartButton(
-                  label: 'Start',
-                  enabled: canStart,
-                  onTap: canStart
-                      ? () => ref
-                            .read(verificationOrchestratorProvider.notifier)
-                            .buildPipeline(config)
-                      : null,
+                child: Column(
+                  children: [
+                    InputFormField(
+                      labelText: 'Company Code',
+                      isRequired: true,
+                      prefixIcon: const Icon(Icons.apartment),
+                      hint: 'Enter your company code',
+                      controller: _companyCodeController,
+                      autocorrect: false,
+                      textCapitalization: TextCapitalization.none,
+                      onChanged: (_) => setState(() {}), // re-evaluate canStart
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      errorText: isInvalidCode
+                          ? (orchestrator.lastError ??
+                                'Company code not recognized.')
+                          : null,
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    const EventSelector(),
+
+                    const SizedBox(height: 40),
+
+                    _StartButton(
+                      label: isLoadingConfig ? 'Loading...' : 'Start',
+                      enabled: canStart && !isLoadingConfig,
+                      onTap: canStart && !isLoadingConfig ? _onStart : null,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -79,20 +133,23 @@ class _StartButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     return SizedBox(
       width: double.infinity,
       child: ElevatedButton(
         onPressed: enabled ? onTap : null,
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 16),
-          backgroundColor: theme.colorScheme.primary,
-          disabledBackgroundColor: Colors.grey.shade300,
+          backgroundColor: const Color(0xFFC00000),
+          disabledBackgroundColor: const Color(0xFF15171B),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
         child: Text(
           label,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: enabled ? Colors.white : Color(0xFF737477),
+          ),
         ),
       ),
     );

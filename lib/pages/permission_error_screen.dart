@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:web_clock_clone/providers/orchestrator_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-
 /// Shown at `/error/permission?type=denied` or `?type=permanent`.
 ///
 /// - `denied`    → soft denial; "Try Again" re-calls [buildPipeline()].
@@ -41,10 +40,7 @@ class PermissionErrorScreen extends ConsumerWidget {
                 const Text(
                   'Camera Permission Required',
                   textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 16),
 
@@ -52,11 +48,11 @@ class PermissionErrorScreen extends ConsumerWidget {
                 Text(
                   _isPermanent
                       ? 'Camera access has been permanently denied. '
-                          'Please open your device Settings and enable the '
-                          'camera permission for this app, then return here.'
+                            'Please open your device Settings and enable the '
+                            'camera permission for this app, then return here.'
                       : 'This app needs camera access to scan QR codes '
-                          'and verify your identity. '
-                          'Please grant the permission when prompted.',
+                            'and verify your identity. '
+                            'Please grant the permission when prompted.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 15,
@@ -72,18 +68,9 @@ class PermissionErrorScreen extends ConsumerWidget {
                   child: ElevatedButton(
                     onPressed: _isPermanent
                         ? () => openAppSettings()
-                        : () async {
-                            // Re-trigger buildPipeline() — this calls
-                            // PermissionHelper.checkCamera() again internally.
-                            final configAsync =
-                                ref.read(featureConfigProvider);
-                            configAsync.whenData((config) {
-                              ref
-                                  .read(verificationOrchestratorProvider
-                                      .notifier)
-                                  .buildPipeline(config);
-                            });
-                          },
+                        : () => ref
+                              .read(verificationOrchestratorProvider.notifier)
+                              .retryPermissionCheck(),
                     style: ElevatedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
@@ -93,7 +80,9 @@ class PermissionErrorScreen extends ConsumerWidget {
                     child: Text(
                       _isPermanent ? 'Open Settings' : 'Try Again',
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w600),
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ),

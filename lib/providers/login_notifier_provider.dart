@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:web_clock_clone/config/verfication_orchestrator.dart';
+import 'package:web_clock_clone/providers/home_notifier_provider.dart';
 import 'package:web_clock_clone/providers/orchestrator_provider.dart';
 import 'package:web_clock_clone/services/login_service.dart';
 import 'package:web_clock_clone/utils/retry_counter.dart';
@@ -8,7 +9,6 @@ import 'package:web_clock_clone/utils/retry_counter.dart';
 enum LoginStatus { idle, loading, success, failure }
 
 class LoginState {
-  final String? companyCode;
   final String? username;
 
   /// Held in memory only — never written to disk or secure storage.
@@ -20,7 +20,6 @@ class LoginState {
   final String? errorMessage;
 
   const LoginState({
-    this.companyCode,
     this.username,
     this.password,
     this.authToken,
@@ -29,7 +28,6 @@ class LoginState {
   });
 
   LoginState copyWith({
-    String? companyCode,
     String? username,
     String? password,
     String? authToken,
@@ -37,7 +35,6 @@ class LoginState {
     String? errorMessage,
   }) {
     return LoginState(
-      companyCode: companyCode ?? this.companyCode,
       username: username ?? this.username,
       password: password ?? this.password,
       authToken: authToken ?? this.authToken,
@@ -71,13 +68,15 @@ class LoginNotifier extends AsyncNotifier<LoginState> {
   // ---------------------------------------------------------------------------
 
   Future<void> submit(
-    String companyCode,
     String username,
     String password, {
     void Function()? onMaxRetriesExceeded,
   }) async {
     state = const AsyncLoading();
 
+    // companyCode now lives on HomeState — set on the home screen before
+    // the pipeline ever starts, and read-only by the time login is reached.
+    final companyCode = ref.read(homeNotifierProvider).companyCode;
     final cancelToken = _orchestrator.cancelTokenManager.generate();
 
     final result = await _repository.login(
@@ -94,7 +93,6 @@ class LoginNotifier extends AsyncNotifier<LoginState> {
 
       state = AsyncData(
         LoginState(
-          companyCode: companyCode,
           username: username,
           password: password, // memory only
           authToken: result.authToken,
